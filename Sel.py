@@ -14,10 +14,7 @@ from Core.promptRUN import *
 from Core.SelGenStructure import *
 import random
 import subprocess
-
-
-
-
+from datasetGen.get_data import *
 
 
 if __name__ == "__main__":
@@ -54,51 +51,56 @@ if __name__ == "__main__":
     logger.info(f"USE-MODEL-TYPE-S{USE_MODEL_TYPE}USE-MODEL-TYPE-E") #记录模型的日志
     input_dir = args.input  
     output_dir = args.output
-    # tokenizer = AutoTokenizer.from_pretrained(model_path)
+    # omit
+    ## tokenizer = AutoTokenizer.from_pretrained(model_path)
 
-    initial_target_funcs_list = []
-    target_class_list = []
+    # initial_target_funcs_list = []
+    # target_class_list = []
 
-    if not os.path.exists(input_dir):
-        print(f"{input_dir} path not exist")
-        os._exit(0)
-    logger.info(f"processing {input_dir}")
-    target_project = CXXProject(input_dir)
+    # if not os.path.exists(input_dir):
+    #     print(f"{input_dir} path not exist")
+    #     os._exit(0)
+    # logger.info(f"processing {input_dir}")
+    # target_project = CXXProject(input_dir)
     
-    # target_project.parse_readme_file(USE_MODEL_TYPE)
-    target_project.filter_file_by_llm(USE_MODEL_TYPE)#保留与项目相关的文件
-    target_project.process()#提取文件中的函数、类、命名空间等信息
-    G = construct_graph(target_project.all_funcs) #将所有的函数都作为节点放到图中
-    target_lang = ""
-    # 构造有向图
-    # G = construct_graph(target_project.all_funcs)
-    # 初步筛选
-    initial_target_funcs_list = []
-    for file_name in target_project.all_file_obj_dict:
-        if target_project.all_file_obj_dict[file_name].config == "cpp":
-            target_lang = "cpp"
-        elif target_project.all_file_obj_dict[file_name].config == "c":
-            target_lang = 'c'
-        break
+    # # target_project.parse_readme_file(USE_MODEL_TYPE)
+    # target_project.filter_file_by_llm(USE_MODEL_TYPE)#保留与项目相关的文件
+    # target_project.process()#提取文件中的函数、类、命名空间等信息
+    # G = construct_graph(target_project.all_funcs) #将所有的函数都作为节点放到图中
+    # target_lang = ""
+    # # 构造有向图
+    # # G = construct_graph(target_project.all_funcs)
+    # # 初步筛选
+    # initial_target_funcs_list = []
+    # for file_name in target_project.all_file_obj_dict:
+    #     if target_project.all_file_obj_dict[file_name].config == "cpp":
+    #         target_lang = "cpp"
+    #     elif target_project.all_file_obj_dict[file_name].config == "c":
+    #         target_lang = 'c'
+    #     break
     
-    # if target_lang == "c":
-    candi_list = [] 
-    for one_func in target_project.all_funcs:
-        if bytearray2str(one_func.name) in {"main","LLVMFuzzerTestOneInput"}:
-            continue
-        candi_list.append(one_func)
-    Selector = CSelector(candi_list,target_project,USE_MODEL_TYPE,1)#分类
-    selector_list = Selector.run()
-    for one_selector in selector_list:
-        dump_path = os.path.join(output_dir,bytearray2str(one_selector.input_func.name)+".sel")
-        with open(dump_path,'w') as f:
-            json.dump(one_selector.todict(),f)
-        print(f"dump {dump_path} over")
+    # # if target_lang == "c":
+    # candi_list = [] 
+    # for one_func in target_project.all_funcs:
+    #     if bytearray2str(one_func.name) in {"main","LLVMFuzzerTestOneInput"}:
+    #         continue
+    #     candi_list.append(one_func)
+    # Selector = CSelector(candi_list,target_project,USE_MODEL_TYPE,1)#分类
+    # selector_list = Selector.run()
+    # for one_selector in selector_list:
+    #     dump_path = os.path.join(output_dir,bytearray2str(one_selector.input_func.name)+".sel")
+    #     with open(dump_path,'w') as f:
+    #         json.dump(one_selector.todict(),f)
+    #     print(f"dump {dump_path} over")
     
             
-    for one_selector in selector_list:
-        print(one_selector.show())
-        logger.info(one_selector.show())
+    # for one_selector in selector_list:
+    #     print(one_selector.show())
+    #     logger.info(one_selector.show())
+
+    fd = FuzzData(gen_floder, output_dir)
+    fd.copy_sel_to_dest()
+
     # for selector in selector_list:
     #     output_path = os.path.join(output_dir,bytearray2str(selector.input_func.name)+"-output")
     #     generator = CGenerator(selector,target_project,USE_MODEL_TYPE)

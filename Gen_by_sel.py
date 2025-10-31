@@ -14,6 +14,9 @@ from Core.promptRUN import *
 from Core.SelGenStructure import *
 import random
 import subprocess
+from datasetGen.get_data import *
+
+
 ###########下面几个函数是为了将筛选结果解析到内存的
 def get_func_by_name(name,func_list):
     for one_func in func_list:
@@ -183,128 +186,138 @@ if __name__ == "__main__":
     cyc_state = "harness"
     cyc_time = 0
     fuzzer_code = ""
-    while True:
-        if cur_state == "api":
-            print("[STATE] GEN API")
-            generator.gen_api_doc()
-            cur_state = "parm"
-        elif cur_state == "parm":
-            print("[STATE] GEN PARM CODE")
-            generator.gen_code_by_parm()
-            cur_state = "robo"
-        elif cur_state == "robo":
-            print("[STATE] GEN ROBO CODE")
-            generator.gen_robo_code()
-            cur_state = "opt"
-        elif cur_state == "opt":
-            print("[STATE] GEN OPT CODE")
-            generator.gen_opt_code()
-            cur_state= "harness"
-        elif cur_state == "harness":
-            # TODO 重新定义run
-            # 最少生成4次
-            print("[STATE] GEN HARNESS CODE")
-            generator.gen_harness_code()
-            content = generator.harness_code
-            code_content = get_code_from_content(content)
-            fuzzer_code = f"{predefine_content}{header_content}{code_content}"
-            # 保存代码
-            with open(gen_file_path, "w") as f:
-                f.write(fuzzer_code)
-            # 编译代码
-            process = subprocess.Popen(gen_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, text=True)
-            stdout, error_message = process.communicate()
-            if isinstance(error_message, bytes):
-                error_message = error_message.decode('utf-8',errors='ignore')
-            # 假设存在编译错误，预先构造prompt
-            ins = INS_regenerate_compile(fuzzer_code,error_message)
-            prompt_str = construct_prompt_str(ins,"",USE_MODEL_TYPE)
-            logger.info(construct_prompt_str(ins,"","content"))
 
-            for _ in range(4):
-                # 如果编译成功，则直接退出
-                if len(error_message) == 0:
-                    # 生成成功，保存文件
+    # while True:
+    #     if cur_state == "api":
+    #         print("[STATE] GEN API")
+    #         generator.gen_api_doc()
+    #         cur_state = "parm"
+    #     elif cur_state == "parm":
+    #         print("[STATE] GEN PARM CODE")
+    #         generator.gen_code_by_parm()
+    #         cur_state = "robo"
+    #     elif cur_state == "robo":
+    #         print("[STATE] GEN ROBO CODE")
+    #         generator.gen_robo_code()
+    #         cur_state = "opt"
+    #     elif cur_state == "opt":
+    #         print("[STATE] GEN OPT CODE")
+    #         generator.gen_opt_code()
+    #         cur_state= "harness"
+    #     elif cur_state == "harness":
+    #         # TODO 重新定义run
+    #         # 最少生成4次
+    #         print("[STATE] GEN HARNESS CODE")
+    #         generator.gen_harness_code()
+    #         content = generator.harness_code
+    #         code_content = get_code_from_content(content)
+    #         fuzzer_code = f"{predefine_content}{header_content}{code_content}"
+    #         # 保存代码
+    #         with open(gen_file_path, "w") as f:
+    #             f.write(fuzzer_code)
+    #         # 编译代码
+    #         process = subprocess.Popen(gen_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, text=True)
+    #         stdout, error_message = process.communicate()
+    #         if isinstance(error_message, bytes):
+    #             error_message = error_message.decode('utf-8',errors='ignore')
+    #         # 假设存在编译错误，预先构造prompt
+    #         ins = INS_regenerate_compile(fuzzer_code,error_message)
+    #         prompt_str = construct_prompt_str(ins,"",USE_MODEL_TYPE)
+    #         logger.info(construct_prompt_str(ins,"","content"))
 
-                    print("generate success")
-                    cur_state = "regen"
-                    break
-                # 编译失败，重新构造构造编译错误代码
-                print("[STATE] GEN HARNESS CODE - recompile")
-                result = run_llm_custom(prompt_str)
-                logger.info(result)
-                # 提取代码
-                content_list = result.split("```c")
-                fuzzer_code = ""
-                for one_code in content_list[::-1]:
-                    if "LLVMFuzzerTestOneInput(" in one_code:
-                        fuzzer_code = one_code.split("```")[0]
-                        break
-                logger.info(fuzzer_code)
-                with open(gen_file_path, "w") as f:
-                    f.write(fuzzer_code)
-                process = subprocess.Popen(gen_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, text=True)
-                stdout, error_message = process.communicate()
-                if isinstance(error_message, bytes):
-                    error_message = error_message.decode('utf-8',errors='ignore')
+    #         for _ in range(4):
+    #             # 如果编译成功，则直接退出
+    #             if len(error_message) == 0:
+    #                 # 生成成功，保存文件
 
-            # 如果cur_state说明4次编译尝试失败，则回退重新生成
-            if cur_state != "regen":
-                if cyc_time < 3:
-                    cur_state = cyc_state
-                    cyc_time += 1
-                else:
-                    if cyc_state == "api":
-                        cur_state = "exit"
-                        print("generate failure")
-                    else:
-                        cyc_time = 1
-                        cyc_state = state[max(state.index(cyc_state)-1,0)]
-                        cur_state = cyc_state
-        elif cur_state == "regen":
-            # TODO 编写regen
-            # 进入到此状态，说明已经生成了一个能够编译的libfuzzer代码了，因此不到万不得已，不会轻易回退。
-            cur_state = "exit"
-            regen_code = fuzzer_code
-            print("[STATE] RUN AND REGEN HARNESS CODE")
-            process = subprocess.Popen(run_gen_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, text=True)
-            stdout, error_message = process.communicate()
-            if isinstance(error_message, bytes):
-                error_message = error_message.decode('utf-8',errors='ignore')
-            if check_run_message(error_message):
-                print("run harness and result is good")
-                cur_state = "exit"
-            else:
-                prompt_str = construct_prompt_str(INS_regenerate_run(regen_code,error_message),"","codeqwen")
-                # 尝试生成10次
-                for _ in range(10):
-                    result = run_llm_custom(prompt_str)
-                    content_list = result.split("```c")
-                    for one_code in content_list[::-1]:
-                        if "LLVMFuzzerTestOneInput(" in one_code:
-                            regen_code = one_code.split("```")[0]
-                            break
-                    logger.info(f"regen code: \n{regen_code}")
-                    with open(gen_file_path, 'w') as f:
-                        f.write(regen_code)
-                    process = subprocess.Popen(gen_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, text=True)
-                    stdout, error_message = process.communicate()
-                    if len(error_message) > 10:
-                        print("re compile error")
-                        continue
-                    print("re compile success, re run harness")
-                    process = subprocess.Popen(run_gen_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, text=True)
-                    stdout, error_message = process.communicate()
-                    if check_run_message(error_message):
-                        print("run harness and result is good")
-                        fuzzer_code = regen_code
-                        cur_state = "exit"
-                        break
-        elif cur_state == "exit":
-            print("exit")
-            output_file_name = output_path + "-0.c"
-            with open(output_file_name, "w") as f:
-                f.write(fuzzer_code)
-            with open(gen_file_path, 'w') as f:
-                f.write(fuzzer_code)
-            break
+    #                 print("generate success")
+    #                 cur_state = "regen"
+    #                 break
+    #             # 编译失败，重新构造构造编译错误代码
+    #             print("[STATE] GEN HARNESS CODE - recompile")
+    #             result = run_llm_custom(prompt_str)
+    #             logger.info(result)
+    #             # 提取代码
+    #             content_list = result.split("```c")
+    #             fuzzer_code = ""
+    #             for one_code in content_list[::-1]:
+    #                 if "LLVMFuzzerTestOneInput(" in one_code:
+    #                     fuzzer_code = one_code.split("```")[0]
+    #                     break
+    #             logger.info(fuzzer_code)
+    #             with open(gen_file_path, "w") as f:
+    #                 f.write(fuzzer_code)
+    #             process = subprocess.Popen(gen_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, text=True)
+    #             stdout, error_message = process.communicate()
+    #             if isinstance(error_message, bytes):
+    #                 error_message = error_message.decode('utf-8',errors='ignore')
+
+    #         # 如果cur_state说明4次编译尝试失败，则回退重新生成
+    #         if cur_state != "regen":
+    #             if cyc_time < 3:
+    #                 cur_state = cyc_state
+    #                 cyc_time += 1
+    #             else:
+    #                 if cyc_state == "api":
+    #                     cur_state = "exit"
+    #                     print("generate failure")
+    #                 else:
+    #                     cyc_time = 1
+    #                     cyc_state = state[max(state.index(cyc_state)-1,0)]
+    #                     cur_state = cyc_state
+    #     elif cur_state == "regen":
+    #         # TODO 编写regen
+    #         # 进入到此状态，说明已经生成了一个能够编译的libfuzzer代码了，因此不到万不得已，不会轻易回退。
+    #         cur_state = "exit"
+    #         regen_code = fuzzer_code
+    #         print("[STATE] RUN AND REGEN HARNESS CODE")
+    #         process = subprocess.Popen(run_gen_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, text=True)
+    #         stdout, error_message = process.communicate()
+    #         if isinstance(error_message, bytes):
+    #             error_message = error_message.decode('utf-8',errors='ignore')
+    #         if check_run_message(error_message):
+    #             print("run harness and result is good")
+    #             cur_state = "exit"
+    #         else:
+    #             prompt_str = construct_prompt_str(INS_regenerate_run(regen_code,error_message),"","codeqwen")
+    #             # 尝试生成10次
+    #             for _ in range(10):
+    #                 result = run_llm_custom(prompt_str)
+    #                 content_list = result.split("```c")
+    #                 for one_code in content_list[::-1]:
+    #                     if "LLVMFuzzerTestOneInput(" in one_code:
+    #                         regen_code = one_code.split("```")[0]
+    #                         break
+    #                 logger.info(f"regen code: \n{regen_code}")
+    #                 with open(gen_file_path, 'w') as f:
+    #                     f.write(regen_code)
+    #                 process = subprocess.Popen(gen_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, text=True)
+    #                 stdout, error_message = process.communicate()
+    #                 if len(error_message) > 10:
+    #                     print("re compile error")
+    #                     continue
+    #                 print("re compile success, re run harness")
+    #                 process = subprocess.Popen(run_gen_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, text=True)
+    #                 stdout, error_message = process.communicate()
+    #                 if check_run_message(error_message):
+    #                     print("run harness and result is good")
+    #                     fuzzer_code = regen_code
+    #                     cur_state = "exit"
+    #                     break
+    #     elif cur_state == "exit":
+    #         output_file_name = output_path + "-0.c"
+    #         with open(output_file_name, "w") as f:
+    #             f.write(fuzzer_code)
+    #         with open(gen_file_path, 'w') as f:
+    #             f.write(fuzzer_code)
+    #         break
+
+    output_file_name = output_path + "-0.c"
+    fd = FuzzGen(gen_floder, output_file_name, gen_file_path)
+    fd.copy_tar_to_dest()
+
+    process = subprocess.Popen(gen_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, text=True)
+    stdout, error_message = process.communicate()
+    if check_run_message(error_message):
+        # print("run harness and result is good")
+        print("done.")

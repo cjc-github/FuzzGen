@@ -2,10 +2,10 @@ tree-sitter
 tree-sitter-cpp
 tree-sitter-c
 networkx
-logging
+# logging
 tqdm
 requests
 datetime
 transformers
-logging
+# logging
 argparse
